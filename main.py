@@ -5,7 +5,6 @@ from threading import Thread
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# Web server for Render Free Tier
 app_web = Flask('')
 
 @app_web.route('/')
@@ -16,10 +15,9 @@ def run_web():
     port = int(os.environ.get("PORT", 8080))
     app_web.run(host='0.0.0.0', port=port)
 
-# Bot logic
 ADMIN_USER_ID = 6282253982
-TELEGRAM_BOT_TOKEN = "YOUR_NEW_TELEGRAM_BOT_TOKEN"
-HERO_API_KEY = "YOUR_NEW_HERO_SMS_API_KEY"
+TELEGRAM_BOT_TOKEN = "8056461427:AAER58t649b0m3qL_e75R8QjQ58nS-c-r14"
+HERO_API_KEY = "179496Uae50c2ceee0f1f14cbeebce710189d97"
 HERO_BASE_URL = "https://hero-sms.com/stubs/handler_api.php"
 
 def is_admin(user_id: int) -> bool:
