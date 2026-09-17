@@ -15,7 +15,7 @@ def run_web():
     port = int(os.environ.get("PORT", 8080))
     app_web.run(host='0.0.0.0', port=port)
 
-# ২ টি Authorized User/Admin ID
+# মেমোরিতে অ্যাডমিন লিস্ট সংরক্ষণ (ডিফল্ট ২ জন)
 ALLOWED_USERS = [6282253982, 8600579923]
 
 TELEGRAM_BOT_TOKEN = "8789966847:AAH0RMLgxUyEFsmgwcujFHrtvX6eel7yecg"
@@ -25,7 +25,6 @@ HERO_BASE_URL = "https://hero-sms.com/stubs/handler_api.php"
 def is_authorized(user_id: int) -> bool:
     return user_id in ALLOWED_USERS
 
-# Permanent Main Menu
 def get_reply_keyboard():
     keyboard = [
         [KeyboardButton("📱 Get Number"), KeyboardButton("💳 Balance")],
@@ -42,13 +41,50 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=get_reply_keyboard()
     )
 
+# ডাইনামিক অ্যাডমিন যোগ করার কমান্ড (/addadmin 12345678)
+async def add_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_authorized(update.effective_user.id):
+        return
+    
+    if not context.args:
+        await update.message.reply_text("⚠️ ফরম্যাট: `/addadmin USER_ID`", parse_mode="Markdown")
+        return
+    
+    try:
+        new_id = int(context.args[0])
+        if new_id in ALLOWED_USERS:
+            await update.message.reply_text("ℹ️ এই আইডিটি আগেই অ্যাডমিন তালিকায় আছে।")
+        else:
+            ALLOWED_USERS.append(new_id)
+            await update.message.reply_text(f"✅ সফলভাবে নতুন অ্যাডমিন যুক্ত করা হয়েছে: `{new_id}`", parse_mode="Markdown")
+    except ValueError:
+        await update.message.reply_text("❌ আইডি অবশ্যই একটি সংখ্যা (Number) হতে হবে।")
+
+# ডাইনামিক অ্যাডমিন রিমুভ করার কমান্ড (/deladmin 12345678)
+async def del_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_authorized(update.effective_user.id):
+        return
+    
+    if not context.args:
+        await update.message.reply_text("⚠️ ফরম্যাট: `/deladmin USER_ID`", parse_mode="Markdown")
+        return
+    
+    try:
+        remove_id = int(context.args[0])
+        if remove_id in ALLOWED_USERS:
+            ALLOWED_USERS.remove(remove_id)
+            await update.message.reply_text(f"🗑️ অ্যাডমিন রিমুভ করা হয়েছে: `{remove_id}`", parse_mode="Markdown")
+        else:
+            await update.message.reply_text("❌ এই আইডিটি অ্যাডমিন তালিকায় নেই।")
+    except ValueError:
+        await update.message.reply_text("❌ আইডি অবশ্যই একটি সংখ্যা (Number) হতে হবে।")
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update.effective_user.id):
         return
 
     text = update.message.text
 
-    # Balance Command
     if text in ["💳 Balance", "/balance"]:
         response = requests.get(HERO_BASE_URL, params={"api_key": HERO_API_KEY, "action": "getBalance"})
         if "ACCESS_BALANCE" in response.text:
@@ -57,7 +93,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_text(f"❌ সমস্যা হয়েছে: {response.text}", reply_markup=get_reply_keyboard())
 
-    # Get Number Command (Egypt & Indonesia)
     elif text in ["📱 Get Number", "/getnum"]:
         inline_keyboard = [
             [InlineKeyboardButton("🇪🇬 Egypt (Telegram Low Rate)", callback_data="country_4")],
@@ -66,7 +101,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(inline_keyboard)
         await update.message.reply_text("দেশ সিলেক্ট করুন (Telegram Low Rate):", reply_markup=reply_markup)
 
-    # Admin Panel Button
     elif text == "⚙️ Admin Panel":
         admin_keyboard = [
             [InlineKeyboardButton("💳 Check API Balance", callback_data="admin_balance")],
@@ -74,9 +108,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🟢 System Status", callback_data="admin_status")]
         ]
         reply_markup = InlineKeyboardMarkup(admin_keyboard)
-        await update.message.reply_text("⚙️ **অ্যাডমিন কন্ট্রোল প্যানেল:**", parse_mode="Markdown", reply_markup=reply_markup)
+        msg_text = (
+            "⚙️ **অ্যাডমিন কন্ট্রোল প্যানেল:**\n\n"
+            "📌 **ইউজার অ্যাড/রিমুভ কমান্ড:**\n"
+            "• যোগ করতে: `/addadmin ID`\n"
+            "• সরাতে: `/deladmin ID`"
+        )
+        await update.message.reply_text(msg_text, parse_mode="Markdown", reply_markup=reply_markup)
 
-# Callback Query Handler for Inline Buttons (Country Selection & Admin Actions)
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -86,7 +125,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
 
     data = query.data
 
-    # Handling Country Selection
     if data.startswith("country_"):
         country_code = data.split("_")[1]
         response = requests.get(HERO_BASE_URL, params={
@@ -106,7 +144,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         else:
             await query.message.reply_text(f"❌ নম্বর পাওয়া যায়নি: {response.text}", reply_markup=get_reply_keyboard())
 
-    # Handling Admin Panel Actions
     elif data == "admin_balance":
         response = requests.get(HERO_BASE_URL, params={"api_key": HERO_API_KEY, "action": "getBalance"})
         if "ACCESS_BALANCE" in response.text:
@@ -129,9 +166,10 @@ if __name__ == '__main__':
     bot.add_handler(CommandHandler("start", start))
     bot.add_handler(CommandHandler("balance", handle_message))
     bot.add_handler(CommandHandler("getnum", handle_message))
+    bot.add_handler(CommandHandler("addadmin", add_admin))
+    bot.add_handler(CommandHandler("deladmin", del_admin))
     bot.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
     
-    # Callback Query Handler for Inline Buttons
     bot.add_handler(CallbackQueryHandler(handle_callback_query))
     
     bot.run_polling()
