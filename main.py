@@ -1,14 +1,25 @@
+import os
 import requests
+from flask import Flask
+from threading import Thread
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# অ্যাডমিন লক আইডি
-ADMIN_USER_ID = 6282253982
+# Web server for Render Free Tier
+app_web = Flask('')
 
-# আপনার প্রদান করা সিক্রেট ক্রেডেনশিয়ালস
+@app_web.route('/')
+def home():
+    return "Bot is running!"
+
+def run_web():
+    port = int(os.environ.get("PORT", 8080))
+    app_web.run(host='0.0.0.0', port=port)
+
+# Bot logic
+ADMIN_USER_ID = 6282253982
 TELEGRAM_BOT_TOKEN = "YOUR_NEW_TELEGRAM_BOT_TOKEN"
 HERO_API_KEY = "YOUR_NEW_HERO_SMS_API_KEY"
-
 HERO_BASE_URL = "https://hero-sms.com/stubs/handler_api.php"
 
 def is_admin(user_id: int) -> bool:
@@ -28,10 +39,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
-    response = requests.get(HERO_BASE_URL, params={
-        "api_key": HERO_API_KEY,
-        "action": "getBalance"
-    })
+    response = requests.get(HERO_BASE_URL, params={"api_key": HERO_API_KEY, "action": "getBalance"})
     if "ACCESS_BALANCE" in response.text:
         balance = response.text.split(":")[1]
         await update.message.reply_text(f"💳 আপনার বর্তমান ব্যালেন্স: ${balance}")
@@ -49,21 +57,14 @@ async def get_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
     })
     if "ACCESS_NUMBER" in response.text:
         data = response.text.split(":")
-        activation_id = data[1]
-        phone_number = data[2]
-        msg = (
-            f"📱 **নতুন নম্বর পাওয়া গেছে!**\n\n"
-            f"**নম্বর:** `{phone_number}`\n"
-            f"**অ্যাক্টিভেশন আইডি:** `{activation_id}`"
-        )
-        await update.message.reply_text(msg, parse_mode="Markdown")
+        await update.message.reply_text(f"📱 **নতুন নম্বর:** `{data[2]}`\n**আইডি:** `{data[1]}`", parse_mode="Markdown")
     else:
         await update.message.reply_text(f"❌ নম্বর পাওয়া যায়নি: {response.text}")
 
 if __name__ == '__main__':
-    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("balance", get_balance))
-    app.add_handler(CommandHandler("getnum", get_number))
-    print("বট সফলভাবে চালু হয়েছে...")
-    app.run_polling()
+    Thread(target=run_web).start()
+    bot = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+    bot.add_handler(CommandHandler("start", start))
+    bot.add_handler(CommandHandler("balance", get_balance))
+    bot.add_handler(CommandHandler("getnum", get_number))
+    bot.run_polling()
