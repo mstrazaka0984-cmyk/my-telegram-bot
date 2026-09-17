@@ -17,7 +17,7 @@ def run_web():
 
 ADMIN_USER_ID = 6282253982
 TELEGRAM_BOT_TOKEN = "8789966847:AAH0RMLgxUyEFsmgwcujFHrtvX6eel7yecg"
-HERO_API_KEY = "179496Uae50c2ceee0f1f14cbeebce710189d97"
+HERO_API_KEY = "d038528eA9dAf95998A99c70de23e695"
 HERO_BASE_URL = "https://hero-sms.com/stubs/handler_api.php"
 
 def is_admin(user_id: int) -> bool:
