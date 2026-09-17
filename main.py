@@ -16,7 +16,7 @@ def run_web():
     app_web.run(host='0.0.0.0', port=port)
 
 ADMIN_USER_ID = 6282253982
-TELEGRAM_BOT_TOKEN = "8056461427:AAER58t649b0m3qL_e75R8QjQ58nS-c-r14"
+TELEGRAM_BOT_TOKEN = "8789966847:AAH0RMLgxUyEFsmgwcujFHrtvX6eel7yecg"
 HERO_API_KEY = "179496Uae50c2ceee0f1f14cbeebce710189d97"
 HERO_BASE_URL = "https://hero-sms.com/stubs/handler_api.php"
 
