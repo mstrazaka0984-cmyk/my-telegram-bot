@@ -1,4 +1,4 @@
-import os
+0import os
 import requests
 from flask import Flask
 from threading import Thread
@@ -121,7 +121,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif text in ["📱 Get Number", "/getnum"]:
         inline_keyboard = [
-            [InlineKeyboardButton("🇪🇬 Egypt (Telegram Low Rate)", callback_data="country_21")],
+            [InlineKeyboardButton("🇪🇬 Egypt (Telegram Low Rate)", callback_data="country_20")],
             [InlineKeyboardButton("🇮🇩 Indonesia (Telegram Low Rate)", callback_data="country_6")]
         ]
         reply_markup = InlineKeyboardMarkup(inline_keyboard)
