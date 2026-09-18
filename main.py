@@ -120,7 +120,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"💳 **আপনার বর্তমান ব্যালেন্স:** ${bal:.2f}", parse_mode="Markdown", reply_markup=get_keyboard(user_id))
 
     elif text in ["📱 Get Number", "/getnum"]:
-        # Egypt Country ID fixed to 21
         inline_keyboard = [
             [InlineKeyboardButton("🇪🇬 Egypt (Telegram Low Rate)", callback_data="country_21")],
             [InlineKeyboardButton("🇮🇩 Indonesia (Telegram Low Rate)", callback_data="country_6")]
@@ -173,7 +172,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             act_id = res_data[1]
             number = res_data[2]
 
-            # Check and Cancel Buttons Included
             action_buttons = [
                 [
                     InlineKeyboardButton("🔄 Check OTP", callback_data=f"check_{act_id}"),
