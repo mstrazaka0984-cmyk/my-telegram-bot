@@ -28,6 +28,18 @@ TELEGRAM_BOT_TOKEN = "8789966847:AAH0RMLgxUyEFsmgwcujFHrtvX6eel7yecg"
 HERO_API_KEY = "d038528eA9dAf95998A99c70de23e695"
 HERO_BASE_URL = "https://hero-sms.com/stubs/handler_api.php"
 
+# দেশ ও API ID ম্যাপ (HeroSMS অনুযায়ী)
+COUNTRIES = {
+    "187": "🇪🇨 Ecuador",
+    "37": "🇲🇦 Morocco",
+    "12": "🇺🇸 USA",
+    "20": "🇪🇬 Egypt",
+    "6": "🇮🇩 Indonesia",
+    "22": "🇮🇳 India",
+    "16": "🇬🇧 UK",
+    "32": "🇷🇺 Russia"
+}
+
 def is_admin(user_id: int) -> bool:
     return user_id in ADMINS
 
@@ -121,11 +133,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif text in ["📱 Get Number", "/getnum"]:
         inline_keyboard = [
-            [InlineKeyboardButton("🇪🇬 Egypt (Telegram Low Rate)", callback_data="country_20")],
-            [InlineKeyboardButton("🇮🇩 Indonesia (Telegram Low Rate)", callback_data="country_6")]
+            [InlineKeyboardButton("✈️ Telegram", callback_data="service_tg")],
+            [InlineKeyboardButton("💬 WhatsApp", callback_data="service_wa")]
         ]
         reply_markup = InlineKeyboardMarkup(inline_keyboard)
-        await update.message.reply_text("দেশ সিলেক্ট করুন (Telegram Low Rate):", reply_markup=reply_markup)
+        await update.message.reply_text("প্লিজ সার্ভিস সিলেক্ট করুন:", reply_markup=reply_markup)
 
     elif text == "⚙️ Admin Panel" and is_admin(user_id):
         admin_keyboard = [
@@ -151,9 +163,21 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
 
     data = query.data
 
-    if data.startswith("country_"):
-        country_code = data.split("_")[1]
+    if data.startswith("service_"):
+        service_code = data.split("_")[1] # tg or wa
+        service_name = "Telegram" if service_code == "tg" else "WhatsApp"
+
+        inline_keyboard = []
+        for cid, name in COUNTRIES.items():
+            inline_keyboard.append([InlineKeyboardButton(name, callback_data=f"buy_{service_code}_{cid}")])
+
+        reply_markup = InlineKeyboardMarkup(inline_keyboard)
+        await query.message.reply_text(f"**{service_name}**-এর জন্য দেশ সিলেক্ট করুন:", parse_mode="Markdown", reply_markup=reply_markup)
+
+    elif data.startswith("buy_"):
+        _, service_code, country_code = data.split("_")
         cost = 0.20
+        country_name = COUNTRIES.get(country_code, country_code)
         
         if USERS.get(user_id, 0.0) < cost:
             await query.message.reply_text(f"❌ আপনার পর্যাপ্ত ব্যালেন্স নেই! প্রয়োজন: ${cost:.2f}", reply_markup=get_keyboard(user_id))
@@ -162,7 +186,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         response = requests.get(HERO_BASE_URL, params={
             "api_key": HERO_API_KEY,
             "action": "getNumber",
-            "service": "tg",
+            "service": service_code,
             "country": country_code
         })
 
@@ -181,7 +205,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             reply_markup = InlineKeyboardMarkup(action_buttons)
 
             await query.message.reply_text(
-                f"📱 **নতুন নম্বর:** `{number}`\n🆔 **আইডি:** `{act_id}`\n\n💸 কাটা হয়েছে: ${cost:.2f}", 
+                f"📱 **নতুন নম্বর ({country_name}):** `{number}`\n🆔 **আইডি:** `{act_id}`\n\n💸 কাটা হয়েছে: ${cost:.2f}", 
                 parse_mode="Markdown", 
                 reply_markup=reply_markup
             )
