@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import aiohttp
+import requests
 from flask import Flask
 from threading import Thread
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
@@ -173,7 +174,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"💳 **আপনার বর্তমান ব্যালেন্স:** ${bal:.2f}", parse_mode="Markdown", reply_markup=get_keyboard(user_id))
 
     elif text in ["📱 Get Number", "/getnum"]:
-        # Country ID 21 = Egypt, 6 = Indonesia
         inline_keyboard = [
             [InlineKeyboardButton("🇪🇬 Egypt (Telegram Low Rate)", callback_data="country_21")],
             [InlineKeyboardButton("🇮🇩 Indonesia (Telegram Low Rate)", callback_data="country_6")]
@@ -205,7 +205,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
 
     data = query.data
 
-    # --- NUMBER ORDERING ---
     if data.startswith("country_"):
         country_code = data.split("_")[1]
         cost = 0.20
@@ -231,7 +230,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             act_id = res_data[1]
             number = res_data[2]
             
-            # Action Buttons
             keyboard = [
                 [
                     InlineKeyboardButton("🔄 Check OTP", callback_data=f"check_{act_id}"),
@@ -248,7 +246,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         else:
             await query.message.reply_text(f"❌ নম্বর পাওয়া যায়নি: {text_res}", reply_markup=get_keyboard(user_id))
 
-    # --- CHECK OTP AND CANCEL ACTIONS ---
     elif data.startswith("check_"):
         act_id = data.split("_")[1]
         async with aiohttp.ClientSession() as session:
@@ -272,12 +269,11 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 text_res = await resp.text()
 
         if "ACCESS_CANCEL" in text_res or "ACCESS_SUCCESS" in text_res:
-            update_db_balance(user_id, 0.20) # Refund balance
+            update_db_balance(user_id, 0.20)
             await query.edit_message_text(f"❌ **নম্বর ক্যানসেল করা হয়েছে!**\n💳 $0.20 রিফান্ড দেওয়া হয়েছে।", parse_mode="Markdown")
         else:
             await query.message.reply_text(f"⚠️ ক্যানসেল করা যায়নি: {text_res}")
 
-    # --- ADMIN ACTIONS ---
     elif is_admin(user_id):
         if data == "admin_balance":
             async with aiohttp.ClientSession() as session:
