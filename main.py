@@ -15,13 +15,12 @@ def run_web():
     port = int(os.environ.get("PORT", 8080))
     app_web.run(host='0.0.0.0', port=port)
 
-# ১. মাস্টার অ্যাডমিন তালিকা (যারা ইউজার ও ব্যালেন্স কন্ট্রোল করবে)
+# ১. মাস্টার অ্যাডমিন তালিকা
 ADMINS = [6282253982, 8600579923]
 
-# ২. অনুমোদিত ইউজার তালিকা ও ডাটাবেস (মেমোরিতে সংরক্ষিত)
-# Format: {user_id: balance}
+# ২. অনুমোদিত ইউজার তালিকা ও ব্যালেন্স ডাটাবেস (মেমোরিতে সংরক্ষিত)
 USERS = {
-    6282253982: 100.0,  # অ্যাডমিনদের ডিফল্ট ব্যালেন্স
+    6282253982: 100.0,
     8600579923: 100.0
 }
 
@@ -36,13 +35,11 @@ def is_user(user_id: int) -> bool:
     return user_id in USERS
 
 def get_keyboard(user_id: int):
-    # অ্যাডমিনদের জন্য Admin Panel বাটন থাকবে
     if is_admin(user_id):
         keyboard = [
             [KeyboardButton("📱 Get Number"), KeyboardButton("💳 Balance")],
             [KeyboardButton("⚙️ Admin Panel")]
         ]
-    # সাধারণ ইউজারদের জন্য শুধু মূল ফিচার থাকবে
     else:
         keyboard = [
             [KeyboardButton("📱 Get Number"), KeyboardButton("💳 Balance")]
@@ -73,8 +70,27 @@ async def add_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if new_id in USERS:
             await update.message.reply_text("ℹ️ এই ইউজার আগেই অনুমোদিত রয়েছে।")
         else:
-            USERS[new_id] = 0.0  # নতুন ইউজারের প্রারম্ভিক ব্যালেন্স 0.0
+            USERS[new_id] = 0.0
             await update.message.reply_text(f"✅ ইউজার সফলভাবে যুক্ত হয়েছে: `{new_id}`", parse_mode="Markdown")
+    except ValueError:
+        await update.message.reply_text("❌ আইডি অবশ্যই একটি সংখ্যা হতে হবে।")
+
+# ইউজার রিমুভ করার কমান্ড (/deluser 12345678)
+async def del_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
+    if not context.args:
+        await update.message.reply_text("⚠️ ফরম্যাট: `/deluser USER_ID`", parse_mode="Markdown")
+        return
+    try:
+        target_id = int(context.args[0])
+        if target_id in ADMINS:
+            await update.message.reply_text("⛔ আপনি কোনো অ্যাডমিনকে বাদ দিতে পারবেন না!")
+        elif target_id in USERS:
+            del USERS[target_id]
+            await update.message.reply_text(f"🗑️ ইউজার সফলতা সাথে রিমুভ করা হয়েছে: `{target_id}`", parse_mode="Markdown")
+        else:
+            await update.message.reply_text("❌ এই আইডিটি ইউজার তালিকায় নেই।")
     except ValueError:
         await update.message.reply_text("❌ আইডি অবশ্যই একটি সংখ্যা হতে হবে।")
 
@@ -104,12 +120,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = update.message.text
 
-    # User Balance Check
     if text in ["💳 Balance", "/balance"]:
         bal = USERS.get(user_id, 0.0)
         await update.message.reply_text(f"💳 **আপনার বর্তমান ব্যালেন্স:** ${bal:.2f}", parse_mode="Markdown", reply_markup=get_keyboard(user_id))
 
-    # Number Purchase Menu
     elif text in ["📱 Get Number", "/getnum"]:
         inline_keyboard = [
             [InlineKeyboardButton("🇪🇬 Egypt (Telegram Low Rate)", callback_data="country_4")],
@@ -118,7 +132,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(inline_keyboard)
         await update.message.reply_text("দেশ সিলেক্ট করুন (Telegram Low Rate):", reply_markup=reply_markup)
 
-    # Admin Panel (Only for Admins)
     elif text == "⚙️ Admin Panel" and is_admin(user_id):
         admin_keyboard = [
             [InlineKeyboardButton("💳 Check API Balance", callback_data="admin_balance")],
@@ -128,6 +141,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg_text = (
             "⚙️ **অ্যাডমিন প্যানেল কমান্ডস:**\n\n"
             "• ইউজার যোগ: `/adduser USER_ID`\n"
+            "• ইউজার রিমুভ: `/deluser USER_ID`\n"
             "• ব্যালেন্স দিতে: `/addbalance USER_ID AMOUNT`"
         )
         await update.message.reply_text(msg_text, parse_mode="Markdown", reply_markup=reply_markup)
@@ -142,11 +156,9 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
 
     data = query.data
 
-    # Handling Country Selection
     if data.startswith("country_"):
         country_code = data.split("_")[1]
         
-        # ব্যালেন্স চেক (ধরুন প্রতি নম্বরের খরচ $0.20)
         cost = 0.20
         if USERS.get(user_id, 0.0) < cost:
             await query.message.reply_text(f"❌ আপনার পর্যাপ্ত ব্যালেন্স নেই! প্রয়োজন: ${cost:.2f}", reply_markup=get_keyboard(user_id))
@@ -160,7 +172,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         })
 
         if "ACCESS_NUMBER" in response.text:
-            USERS[user_id] -= cost  # ইউজারের অ্যাকাউন্ট থেকে টাকা কাটা
+            USERS[user_id] -= cost
             res_data = response.text.split(":")
             await query.message.reply_text(
                 f"📱 **নতুন নম্বর:** `{res_data[2]}`\n**আইডি:** `{res_data[1]}`\n\n💸 কাটা হয়েছে: ${cost:.2f}", 
@@ -170,7 +182,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         else:
             await query.message.reply_text(f"❌ নম্বর পাওয়া যায়নি: {response.text}", reply_markup=get_keyboard(user_id))
 
-    # Admin Callback Actions
     elif is_admin(user_id):
         if data == "admin_balance":
             response = requests.get(HERO_BASE_URL, params={"api_key": HERO_API_KEY, "action": "getBalance"})
@@ -189,6 +200,7 @@ if __name__ == '__main__':
     bot.add_handler(CommandHandler("balance", handle_message))
     bot.add_handler(CommandHandler("getnum", handle_message))
     bot.add_handler(CommandHandler("adduser", add_user))
+    bot.add_handler(CommandHandler("deluser", del_user))
     bot.add_handler(CommandHandler("addbalance", add_balance))
     bot.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
     
