@@ -1,19 +1,12 @@
 import os
 import requests
-from flask import Flask
+import re
+from flask import Flask, request, jsonify
 from threading import Thread
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
 app_web = Flask('')
-
-@app_web.route('/')
-def home():
-    return "Bot is running!"
-
-def run_web():
-    port = int(os.environ.get("PORT", 8080))
-    app_web.run(host='0.0.0.0', port=port)
 
 # ১. মাস্টার অ্যাডমিন তালিকা
 ADMINS = [6282253982, 8600579923]
@@ -24,21 +17,67 @@ USERS = {
     8600579923: 100.0
 }
 
-TELEGRAM_BOT_TOKEN = "8789966847:AAH0RMLgxUyEFsmgwcujFHrtvX6eel7yecg"
-HERO_API_KEY = "d038528eA9dAf95998A99c70de23e695"
-HERO_BASE_URL = "https://hero-sms.com/stubs/handler_api.php"
+# ৩. অ্যাক্টিভ সেশন ট্র্যাকার (কোন নম্বর কোন ইউজার ব্যবহার করছে)
+ACTIVE_SESSIONS = {}
 
-# দেশ ও API ID ম্যাপ (HeroSMS অনুযায়ী)
-COUNTRIES = {
-    "187": "🇪🇨 Ecuador",
-    "37": "🇲🇦 Morocco",
-    "12": "🇺🇸 USA",
-    "20": "🇪🇬 Egypt",
-    "6": "🇮🇩 Indonesia",
-    "22": "🇮🇳 India",
-    "16": "🇬🇧 UK",
-    "32": "🇷🇺 Russia"
+TELEGRAM_BOT_TOKEN = "8789966847:AAH0RMLgxUyEFsmgwcujFHrtvX6eel7yecg"
+
+# ৪. মাল্টি-কান্ট্রি নম্বর পুল (দেশ অনুযায়ী নম্বর আলাদা রাখার ডিকশনারি)
+NUMBER_POOLS = {
+    "ecuador": [],
+    "egypt": [],
+    "indonesia": []
 }
+
+# ৫. ওটিপি ভয়েস টেক্সট থেকে সংখ্যা ফিল্টার করার ফাংশন
+def text_to_digits(text):
+    word_to_digit = {
+        'zero': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4',
+        'five': '5', 'six': '6', 'seven': '7', 'eight': '8', 'nine': '9'
+    }
+    digits = []
+    words = re.findall(r'\b\w+\b', text.lower())
+    for word in words:
+        if word in word_to_digit:
+            digits.append(word_to_digit[word])
+    return "".join(digits) if digits else None
+
+# ৬. Orange Carrier এর ইনকামিং ভয়েস কল ওয়েবহুক রাউট
+@app_web.route('/api/voice-callback', methods=['POST'])
+def voice_callback():
+    data = request.json
+    incoming_number = data.get('to_number') 
+    
+    if incoming_number in ACTIVE_SESSIONS:
+        user_id = ACTIVE_SESSIONS[incoming_number]
+        
+        try:
+            voice_text = data.get('transcription_text', "")
+            otp_code = text_to_digits(voice_text)
+            
+            if otp_code:
+                bot_url = f"https://telegram.org{TELEGRAM_BOT_TOKEN}/sendMessage"
+                msg_payload = {
+                    "chat_id": user_id,
+                    "text": f"📞 **OTP Received**\n`{incoming_number}`\n\n_\"{voice_text}\"_\n\n🔑 `{otp_code}`",
+                    "parse_mode": "Markdown"
+                }
+                requests.post(bot_url, json=msg_payload)
+                del ACTIVE_SESSIONS[incoming_number]
+        except Exception as e:
+            print(f"Error processing Voice OTP: {e}")
+            
+    return jsonify({"status": "success"}), 200
+
+@app_web.route('/')
+def home():
+    return "Bot is running with Multi-Country Admin Number Manager!"
+
+def run_web():
+    port = int(os.environ.get("PORT", 8080))
+    app_web.run(host='0.0.0.0', port=port)
+
+# --- টেলিগ্রাম বটের মূল কোড পার্ট ---
 
 def is_admin(user_id: int) -> bool:
     return user_id in ADMINS
@@ -61,201 +100,140 @@ def get_keyboard(user_id: int):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not is_user(user_id):
-        await update.message.reply_text(f"⛔ দুঃখিত! আপনার সার্ভিস ব্যবহারের অনুমতি নেই।\nআপনার Telegram ID: `{user_id}`", parse_mode="Markdown")
+        await update.message.reply_text(f"⛔ দুঃখিত! আপনার সার্ভিস ব্যবহারের অনুমতি নেই।\n**Telegram ID:** `{user_id}`", parse_mode="Markdown")
         return
-    
-    await update.message.reply_text(
-        "স্বাগতম! 👋\nনিচের MENU থেকে আপনার প্রয়োজনীয় অপশন সিলেক্ট করুন:",
-        reply_markup=get_keyboard(user_id)
-    )
+    await update.message.reply_text("স্বাগতম! 👋\nনিচের MENU থেকে আপনার প্রয়োজনীয় অপশন সিলেক্ট করুন:", reply_markup=get_keyboard(user_id))
 
-async def add_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
-        return
-    if not context.args:
-        await update.message.reply_text("⚠️ ফরম্যাট: `/adduser USER_ID`", parse_mode="Markdown")
-        return
-    try:
-        new_id = int(context.args[0])
-        if new_id in USERS:
-            await update.message.reply_text("ℹ️ এই ইউজার আগেই অনুমোদিত রয়েছে।")
-        else:
-            USERS[new_id] = 0.0
-            await update.message.reply_text(f"✅ ইউজার সফলভাবে যুক্ত হয়েছে: `{new_id}`", parse_mode="Markdown")
-    except ValueError:
-        await update.message.reply_text("❌ আইডি অবশ্যই একটি সংখ্যা হতে হবে।")
-
-async def del_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
-        return
-    if not context.args:
-        await update.message.reply_text("⚠️ ফরম্যাট: `/deluser USER_ID`", parse_mode="Markdown")
-        return
-    try:
-        target_id = int(context.args[0])
-        if target_id in ADMINS:
-            await update.message.reply_text("⛔ আপনি কোনো অ্যাডমিনকে বাদ দিতে পারবেন না!")
-        elif target_id in USERS:
-            del USERS[target_id]
-            await update.message.reply_text(f"🗑️ ইউজার সফলতার সাথে রিমুভ করা হয়েছে: `{target_id}`", parse_mode="Markdown")
-        else:
-            await update.message.reply_text("❌ এই আইডিটি ইউজার তালিকায় নেই।")
-    except ValueError:
-        await update.message.reply_text("❌ আইডি অবশ্যই একটি সংখ্যা হতে হবে।")
-
-async def add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ⚙️ অ্যাডমিন কমান্ড ১: দেশের নাম উল্লেখ করে নম্বর যোগ করা
+async def add_bulk_numbers(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
     if len(context.args) < 2:
-        await update.message.reply_text("⚠️ ফরম্যাট: `/addbalance USER_ID AMOUNT`", parse_mode="Markdown")
+        await update.message.reply_text(
+            "⚠️ **সঠিক ফরম্যাট:** `/addnum [দেশের_নাম] [নম্বর১,নম্বর২]`\n\n"
+            "**উদাহরণ:** `/addnum ecuador +593962854970,+593962855003`\n"
+            "*(দেশের নাম ছোট হাতের অক্ষরে স্পেস ছাড়া লিখবেন)*", 
+            parse_mode="Markdown"
+        )
         return
-    try:
-        target_id = int(context.args[0])
-        amount = float(context.args[1])
-        if target_id not in USERS:
-            await update.message.reply_text("❌ ইউজারটি সিস্টেমে নেই! আগে `/adduser` দিন।", parse_mode="Markdown")
-        else:
-            USERS[target_id] += amount
-            await update.message.reply_text(f"💳 `{target_id}` এর অ্যাকাউন্টে **${amount}** যোগ করা হয়েছে!\nবর্তমান ব্যালেন্স: **${USERS[target_id]}**", parse_mode="Markdown")
-    except ValueError:
-        await update.message.reply_text("❌ সঠিক ID ও Amount দিন। (যেমন: `/addbalance 123456 5.5`)", parse_mode="Markdown")
+    
+    country = context.args[0].lower()
+    raw_numbers_input = context.args[1]
+    raw_numbers = raw_numbers_input.split(",")
+    
+    if country not in NUMBER_POOLS:
+        NUMBER_POOLS[country] = []
+        
+    added_count = 0
+    for num in raw_numbers:
+        clean_num = num.strip()
+        if clean_num and clean_num not in NUMBER_POOLS[country]:
+            NUMBER_POOLS[country].append(clean_num)
+            added_count += 1
+            
+    await update.message.reply_text(
+        f"✅ সফলভাবে **{country.upper()}** দেশে **{added_count}** টি নতুন নম্বর যোগ করা হয়েছে!\n"
+        f"📊 এই দেশে বর্তমান মোট নম্বর: **{len(NUMBER_POOLS[country])}**", 
+        parse_mode="Markdown"
+    )
+
+# ⚙️ অ্যাডমিন কমান্ড ২: নির্দিষ্ট দেশের নম্বর রিসেট করা
+async def clear_all_numbers(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
+    if not context.args:
+        await update.message.reply_text("⚠️ **ফরম্যাট:** `/clear_numbers [দেশের_নাম]` (যেমন: `/clear_numbers ecuador`)")
+        return
+    
+    country = context.args[0].lower()
+    if country in NUMBER_POOLS:
+        NUMBER_POOLS[country] = []
+        await update.message.reply_text(f"🗑️ **{country.upper()}** দেশের সব পুরনো নম্বর সফলভাবে মুছে ফেলা হয়েছে!")
+    else:
+        await update.message.reply_text("❌ এই নামের কোনো দেশ ডাটাবেজে পাওয়া যায়নি।")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if not is_user(user_id):
-        return
-
+    if not is_user(user_id): return
     text = update.message.text
 
     if text in ["💳 Balance", "/balance"]:
         bal = USERS.get(user_id, 0.0)
-        await update.message.reply_text(f"💳 **আপনার বর্তমান ব্যালেন্স:** ${bal:.2f}", parse_mode="Markdown", reply_markup=get_keyboard(user_id))
+        await update.message.reply_text(f"💳 **আপনার বর্তমান ব্যালেন্স:** \${bal:.2f}", parse_mode="Markdown", reply_markup=get_keyboard(user_id))
 
     elif text in ["📱 Get Number", "/getnum"]:
         inline_keyboard = [
-            [InlineKeyboardButton("✈️ Telegram", callback_data="service_tg")],
-            [InlineKeyboardButton("💬 WhatsApp", callback_data="service_wa")]
+            [InlineKeyboardButton("🇪🇨 Ecuador (Voice / IVR)", callback_data="get_ecuador")],
+            [InlineKeyboardButton("🇪🇬 Egypt (Voice / IVR)", callback_data="get_egypt")],
+            [InlineKeyboardButton("🇮🇩 Indonesia (Voice / IVR)", callback_data="get_indonesia")]
         ]
-        reply_markup = InlineKeyboardMarkup(inline_keyboard)
-        await update.message.reply_text("প্লিজ সার্ভিস সিলেক্ট করুন:", reply_markup=reply_markup)
+        await update.message.reply_text("দেশ সিলেক্ট করুন:", reply_markup=InlineKeyboardMarkup(inline_keyboard))
 
     elif text == "⚙️ Admin Panel" and is_admin(user_id):
-        admin_keyboard = [
-            [InlineKeyboardButton("💳 Check API Balance", callback_data="admin_balance")],
-            [InlineKeyboardButton("👥 User List & Balances", callback_data="admin_list")]
-        ]
-        reply_markup = InlineKeyboardMarkup(admin_keyboard)
         msg_text = (
             "⚙️ **অ্যাডমিন প্যানেল কমান্ডস:**\n\n"
             "• ইউজার যোগ: `/adduser USER_ID`\n"
-            "• ইউজার রিমুভ: `/deluser USER_ID`\n"
-            "• ব্যালেন্স দিতে: `/addbalance USER_ID AMOUNT`"
+            "• ব্যালেন্স দিতে: `/addbalance USER_ID AMOUNT`\n"
+            "• 🆕 **দেশসহ নম্বর যোগ:** `/addnum ecuador +59312345,+59367890`\n"
+            "• 🆕 **নির্দিষ্ট দেশের নম্বর ডিলিট:** `/clear_numbers ecuador`"
         )
-        await update.message.reply_text(msg_text, parse_mode="Markdown", reply_markup=reply_markup)
+        await update.message.reply_text(msg_text, parse_mode="Markdown")
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     user_id = query.from_user.id
-    if not is_user(user_id):
-        return
+    if not is_user(user_id): return
+    
+    cost = 0.15  # প্রতি নম্বর চার্জ ১৫ সেন্ট
 
-    data = query.data
+    target_country = ""
+    if query.data == "get_ecuador": target_country = "ecuador"
+    elif query.data == "get_egypt": target_country = "egypt"
+    elif query.data == "get_indonesia": target_country = "indonesia"
 
-    if data.startswith("service_"):
-        service_code = data.split("_")[1] # tg or wa
-        service_name = "Telegram" if service_code == "tg" else "WhatsApp"
-
-        inline_keyboard = []
-        for cid, name in COUNTRIES.items():
-            inline_keyboard.append([InlineKeyboardButton(name, callback_data=f"buy_{service_code}_{cid}")])
-
-        reply_markup = InlineKeyboardMarkup(inline_keyboard)
-        await query.message.reply_text(f"**{service_name}**-এর জন্য দেশ সিলেক্ট করুন:", parse_mode="Markdown", reply_markup=reply_markup)
-
-    elif data.startswith("buy_"):
-        _, service_code, country_code = data.split("_")
-        cost = 0.20
-        country_name = COUNTRIES.get(country_code, country_code)
-        
+    if target_country:
         if USERS.get(user_id, 0.0) < cost:
-            await query.message.reply_text(f"❌ আপনার পর্যাপ্ত ব্যালেন্স নেই! প্রয়োজন: ${cost:.2f}", reply_markup=get_keyboard(user_id))
+            await query.message.reply_text(f"❌ আপনার পর্যাপ্ত ব্যালেন্স নেই! প্রয়োজন: \${cost:.2f}")
+            return
+        
+        country_pool = NUMBER_POOLS.get(target_country, [])
+        if len(country_pool) == 0:
+            await query.message.reply_text(f"❌ দুঃখিত! এই মুহূর্তে **{target_country.upper()}** এর পুলে কোনো নম্বর নেই।")
             return
 
-        response = requests.get(HERO_BASE_URL, params={
-            "api_key": HERO_API_KEY,
-            "action": "getNumber",
-            "service": service_code,
-            "country": country_code
-        })
-
-        if "ACCESS_NUMBER" in response.text:
-            USERS[user_id] -= cost
-            res_data = response.text.split(":")
-            act_id = res_data[1]
-            number = res_data[2]
-
-            action_buttons = [
-                [
-                    InlineKeyboardButton("🔄 Check OTP", callback_data=f"check_{act_id}"),
-                    InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_{act_id}")
-                ]
-            ]
-            reply_markup = InlineKeyboardMarkup(action_buttons)
-
-            await query.message.reply_text(
-                f"📱 **নতুন নম্বর ({country_name}):** `{number}`\n🆔 **আইডি:** `{act_id}`\n\n💸 কাটা হয়েছে: ${cost:.2f}", 
-                parse_mode="Markdown", 
-                reply_markup=reply_markup
-            )
-        else:
-            await query.message.reply_text(f"❌ নম্বর পাওয়া যায়নি: {response.text}", reply_markup=get_keyboard(user_id))
-
-    elif data.startswith("check_"):
-        act_id = data.split("_")[1]
-        response = requests.get(HERO_BASE_URL, params={"api_key": HERO_API_KEY, "action": "getStatus", "id": act_id})
+        numbers_to_show = country_pool[:5] 
         
-        if "STATUS_OK" in response.text:
-            code = response.text.split(":")[1]
-            await query.message.reply_text(f"✅ **আপনার OTP কোড:** `{code}`", parse_mode="Markdown")
-        elif "STATUS_WAIT_CODE" in response.text:
-            await query.message.reply_text("⏳ এখনও কোড আসেনি, কিছুক্ষণ পর আবার ট্রাই করুন।")
-        else:
-            await query.message.reply_text(f"ℹ️ স্ট্যাটাস: {response.text}")
+        msg_text = f"📱 **আপনার জন্য {target_country.upper()} এর নম্বর রেঞ্জ:**\n\n"
+        for num in numbers_to_show:
+            msg_text += f"📋 `{num}`\n"
+            ACTIVE_SESSIONS[num] = user_id
+            
+        USERS[user_id] -= cost 
+        msg_text += f"\n💸 কাটা হয়েছে: \${cost:.2f}\n\n💡 _যেকোনো একটি নম্বর কপি করে কাজ শুরু করুন। কোড অটোমেটিক চলে আসবে।_"
+        
+        await query.message.reply_text(msg_text, parse_mode="Markdown")
 
-    elif data.startswith("cancel_"):
-        act_id = data.split("_")[1]
-        response = requests.get(HERO_BASE_URL, params={"api_key": HERO_API_KEY, "action": "setStatus", "id": act_id, "status": "8"})
+async def add_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id): return
+    if not context.args: return
+    new_id = int(context.args[0])
+    USERS[new_id] = 0.0
+    await update.message.reply_text(f"✅ ইউজার সফলভাবে যুক্ত হয়েছে: `{new_id}`")
 
-        if "ACCESS_CANCEL" in response.text or "ACCESS_SUCCESS" in response.text:
-            USERS[user_id] += 0.20
-            await query.edit_message_text(f"❌ **নম্বর ক্যানসেল করা হয়েছে!**\n💳 $0.20 রিফান্ড দেওয়া হয়েছে।", parse_mode="Markdown")
-        else:
-            await query.message.reply_text(f"⚠️ ক্যানসেল করা যায়নি: {response.text}")
+def main():
+    Thread(target=run_web).start()
+    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
-    elif is_admin(user_id):
-        if data == "admin_balance":
-            response = requests.get(HERO_BASE_URL, params={"api_key": HERO_API_KEY, "action": "getBalance"})
-            bal = response.text.split(":")[1] if "ACCESS_BALANCE" in response.text else response.text
-            await query.message.reply_text(f"⚙️ HeroSMS API Balance: ${bal}")
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("adduser", add_user))
+    app.add_handler(CommandHandler("addnum", add_bulk_numbers))
+    app.add_handler(CommandHandler("clear_numbers", clear_all_numbers))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(CallbackQueryHandler(handle_callback_query))
 
-        elif data == "admin_list":
-            user_text = "👥 **ইউজার তালিকা ও ব্যালেন্স:**\n" + "\n".join([f"• `{uid}` : ${bal:.2f}" for uid, bal in USERS.items()])
-            await query.message.reply_text(user_text, parse_mode="Markdown")
+    print("Bot is alive and running...")
+    app.run_polling()
 
 if __name__ == '__main__':
-    Thread(target=run_web).start()
-    bot = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
-    
-    bot.add_handler(CommandHandler("start", start))
-    bot.add_handler(CommandHandler("balance", handle_message))
-    bot.add_handler(CommandHandler("getnum", handle_message))
-    bot.add_handler(CommandHandler("adduser", add_user))
-    bot.add_handler(CommandHandler("deluser", del_user))
-    bot.add_handler(CommandHandler("addbalance", add_balance))
-    bot.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    
-    bot.add_handler(CallbackQueryHandler(handle_callback_query))
-    
-    bot.run_polling()
+    main()
