@@ -91,7 +91,7 @@ async def del_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("⛔ আপনি কোনো অ্যাডমিনকে বাদ দিতে পারবেন না!")
         elif target_id in USERS:
             del USERS[target_id]
-            await update.message.reply_text(f"🗑️ ইউজার সফলতার সাথে رিমুভ করা হয়েছে: `{target_id}`", parse_mode="Markdown")
+            await update.message.reply_text(f"🗑️ ইউজার সফলতার সাথে রিমুভ করা হয়েছে: `{target_id}`", parse_mode="Markdown")
         else:
             await update.message.reply_text("❌ এই আইডিটি ইউজার তালিকায় নেই।")
     except ValueError:
@@ -226,4 +226,4 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 await query.message.reply_text("⚙️ **Golden API Connection Status:** 🟢 Connected & Active")
             else:
                 await query.message.reply_text(f"⚠️ এপিআই সংযোগে ত্রুটি। কোড: {response.status_code}")
-    
+                                        
