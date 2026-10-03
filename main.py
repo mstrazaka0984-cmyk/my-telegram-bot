@@ -1,19 +1,25 @@
 import os
+import http.server
+import socketserver
 import requests
-from flask import Flask
 from threading import Thread
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
-app_web = Flask('')
-
-@app_web.route('/')
-def home():
-    return "Bot is running!"
-
+# --- Render-এর পোর্ট সচল রাখার জন্য হালকা বিল্ট-ইন সার্ভার ---
 def run_web():
+    class HealthCheckHandler(http.server.SimpleHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"Bot is running!")
+
     port = int(os.environ.get("PORT", 8080))
-    app_web.run(host='0.0.0.0', port=port)
+    # ডুপ্লিকেট পোর্ট এরর এড়াতে ALLOW_REUSE_ADDRESS সেট করা হয়েছে
+    socketserver.TCPServer.allow_reuse_address = True
+    with socketserver.TCPServer(("", port), HealthCheckHandler) as httpd:
+        httpd.serve_forever()
 
 # ১. মাস্টার অ্যাডমিন তালিকা
 ADMINS = [6282253982, 8600579923]
@@ -217,13 +223,4 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     elif data.startswith("cancel_"):
         act_id = data.split("_")[1]
         USERS[user_id] += cost
-        await query.edit_message_text(f"❌ **নম্বর ক্যানসেল করা হয়েছে!**\n💳 ${cost:.2f} রিফান্ড দেওয়া হয়েছে।", parse_mode="Markdown")
-
-    elif is_admin(user_id):
-        if data == "admin_balance":
-            response = requests.get(f"{GOLDEN_BASE_URL}/subaccounts", headers=HEADERS)
-            if response.status_code == 200:
-                await query.message.reply_text("⚙️ **Golden API Connection Status:** 🟢 Connected & Active")
-            else:
-                await query.message.reply_text(f"⚠️ এপিআই সংযোগে ত্রুটি। কোড: {response.status_code}")
-                                        
+    
