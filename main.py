@@ -91,7 +91,7 @@ async def del_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("⛔ আপনি কোনো অ্যাডমিনকে বাদ দিতে পারবেন না!")
         elif target_id in USERS:
             del USERS[target_id]
-            await update.message.reply_text(f"🗑️ ইউজার সফলতার সাথে রিমুভ করা হয়েছে: `{target_id}`", parse_mode="Markdown")
+            await update.message.reply_text(f"🗑️ ইউজার সফলতার সাথে رিমুভ করা হয়েছে: `{target_id}`", parse_mode="Markdown")
         else:
             await update.message.reply_text("❌ এই আইডিটি ইউজার তালিকায় নেই।")
     except ValueError:
@@ -168,7 +168,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         if response.status_code == 200:
             res_json = response.json()
             if res_json and "data" in res_json and len(res_json["data"]) > 0:
-                target_data = res_json["data"][0]
+                target_data = res_json["data"][0] if isinstance(res_json["data"], list) else res_json["data"]
                 number = target_data.get("number")
                 act_id = number
                 
@@ -200,9 +200,9 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         otp_found = False
         if response.status_code == 200:
             res_json = response.json()
-            if "data" in res_json:
+            if "data" in res_json and isinstance(res_json["data"], list):
                 for call in res_json["data"]:
-                    if call.get("prn") == act_id or call.get("cli") == act_id:
+                    if str(call.get("prn")) == str(act_id) or str(call.get("cli")) == str(act_id):
                         text_received = call.get("text", "") or call.get("msg", "")
                         if text_received:
                             await query.message.reply_text(f"✅ **আপনার OTP কোড / মেসেজ:**\n`{text_received}`", parse_mode="Markdown")
@@ -226,6 +226,4 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 await query.message.reply_text("⚙️ **Golden API Connection Status:** 🟢 Connected & Active")
             else:
                 await query.message.reply_text(f"⚠️ এপিআই সংযোগে ত্রুটি। কোড: {response.status_code}")
-
-        elif data == "admin_list":
-        
+    
