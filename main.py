@@ -126,7 +126,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"💳 **আপনার বর্তমান ব্যালেন্স:** ${bal:.2f}", parse_mode="Markdown", reply_markup=get_keyboard(user_id))
 
     elif text in ["📱 Get Number", "/getnum"]:
-        # এখানে গ্রাহক হোয়াটসঅ্যাপ নাকি টেলিগ্রামের জন্য নম্বর নিবেন তা সিলেক্ট করবেন
         inline_keyboard = [
             [InlineKeyboardButton("💬 WhatsApp Code", callback_data="select_whatsapp")],
             [InlineKeyboardButton("✈️ Telegram Code", callback_data="select_telegram")]
@@ -157,26 +156,22 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     data = query.data
-    cost = 0.20  # প্রতি নম্বর চার্জ
+    cost = 0.20
 
-    # অ্যাপ সিলেক্ট করার পর লাইভ এপিআই থেকে নম্বর টানার ফাংশন
     if data in ["select_whatsapp", "select_telegram"]:
         if USERS.get(user_id, 0.0) < cost:
             await query.message.reply_text(f"❌ আপনার পর্যাপ্ত ব্যালেন্স নেই! প্রয়োজন: ${cost:.2f}", reply_markup=get_keyboard(user_id))
             return
 
-        # World Premium Telecom লাইভ নম্বর লিস্ট থেকে নম্বর নেওয়ার রিকোয়েস্ট
         response = requests.get(f"{GOLDEN_BASE_URL}/numbers", headers=HEADERS)
 
         if response.status_code == 200:
             res_json = response.json()
-            # লাইভ ডাটা থেকে প্রথম এভেলেবল নম্বরটি সংগ্রহ করা হচ্ছে
             if res_json and "data" in res_json and len(res_json["data"]) > 0:
                 target_data = res_json["data"][0]
                 number = target_data.get("number")
-                act_id = target_data.get("number") # এই এপিআই-তে নম্বর নিজেই ইউনিক আইডি হিসেবে কাজ করে
+                act_id = number
                 
-                # ব্যালেন্স কাটা
                 USERS[user_id] -= cost
 
                 action_buttons = [
@@ -198,11 +193,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         else:
             await query.message.reply_text("❌ এপিআই সার্ভার থেকে নম্বর রেসপন্স পাওয়া যায়নি।", reply_markup=get_keyboard(user_id))
 
-    # লাইভ ওটিপি কোড চেক করার ফাংশন
     elif data.startswith("check_"):
         act_id = data.split("_")[1]
-        
-        # অ্যাক্টিভ কল বা ওটিপি চেক করার এন্ডপয়েন্ট
         response = requests.get(f"{GOLDEN_BASE_URL}/active-calls", headers=HEADERS)
         
         otp_found = False
@@ -210,9 +202,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             res_json = response.json()
             if "data" in res_json:
                 for call in res_json["data"]:
-                    # যদি নম্বরের কল লগে ওটিপি বা টেক্সট আসে
                     if call.get("prn") == act_id or call.get("cli") == act_id:
-                        # টেক্সট বা ওটিপি ফিল্ড রিড করা (ডকুমেন্টেশন ভ্যালু অনুযায়ী)
                         text_received = call.get("text", "") or call.get("msg", "")
                         if text_received:
                             await query.message.reply_text(f"✅ **আপনার OTP কোড / মেসেজ:**\n`{text_received}`", parse_mode="Markdown")
@@ -224,7 +214,18 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         else:
             await query.message.reply_text("⚠️ ওটিপি সার্ভার চেক করা যাচ্ছে না।")
 
-    # নম্বর ক্যানসেল ও রিফান্ড করার ফাংশন
     elif data.startswith("cancel_"):
         act_id = data.split("_")[1]
-    
+        USERS[user_id] += cost
+        await query.edit_message_text(f"❌ **নম্বর ক্যানসেল করা হয়েছে!**\n💳 ${cost:.2f} রিফান্ড দেওয়া হয়েছে।", parse_mode="Markdown")
+
+    elif is_admin(user_id):
+        if data == "admin_balance":
+            response = requests.get(f"{GOLDEN_BASE_URL}/subaccounts", headers=HEADERS)
+            if response.status_code == 200:
+                await query.message.reply_text("⚙️ **Golden API Connection Status:** 🟢 Connected & Active")
+            else:
+                await query.message.reply_text(f"⚠️ এপিআই সংযোগে ত্রুটি। কোড: {response.status_code}")
+
+        elif data == "admin_list":
+        
